@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sunset Szenario (Luxemburg)</title>
+  <style>
+    /* 2-Spalten-Layout */
+    #scenario-wrap {
+      display: grid;
+      grid-template-columns: 40% 60%;  /* linke und rechte Spalte */
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 760px) {
+      #scenario-wrap {
+        grid-template-columns: 1fr;  /* auf kleinen Bildschirmen untereinander */
+      }
+    }
+    #scenario-img {
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+      display: block;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      object-fit: cover;
+      margin: 0 auto; /* Bild mittig in seiner Spalte */
+    }
+    #scenario-fig { margin: 0; }
+    #scenario-cap { color:#6b7280; font-size:.9rem; margin-top:.35rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Wieder-Szenarioen fir Photographen zu Lëtzebuerg</h1>
+  <h2>Een Internet-Site fir verschieden Wiederkonstellatiounen fir Landschafts- a Naturphotographie zu Lëtzebuerg</h2>
+
+  <div>Datum: <span id="today">—</span></div>
+  <div>Aktuelle Uhrzeit: <span id="now">—</span></div>
+  <div>Sonnenaufgang: <span id="sunrise">—</span></div>
+  <div>Sonnenuntergang: <span id="sunset">—</span></div>
+  <div>Tageslänge: <span id="tageslaenge">—</span></div>
+
+  <p></p>
+  <div id="sunset-box">Lade…</div>
+
+  <script>
+  (async () => {
+    const tz = "Europe/Luxembourg";
+    const lat = 49.6116, lon = 6.1319;
+    const imgBasePath = "./"; // ggf. ändern
+
+    // ----- Format-Helfer -----
+    const fmtTime = (iso) =>
+      new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:false, timeZone: tz });
+    const fmtDateReadable = (d) =>
+      new Intl.DateTimeFormat("de-LU", { weekday:"long", year:"numeric", month:"long", day:"numeric", timeZone: tz }).format(d);
+    const fmtNow = () =>
+      new Date().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false, timeZone: tz });
+    const km = (m) => (m == null ? "—" : Math.round(m/1000) + " km");
+    const nowLux = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+
+    const localYMD = (d) => {
+      const y = new Intl.DateTimeFormat("en-CA",{timeZone:tz, year:"numeric"}).format(d);
+      const m = new Intl.DateTimeFormat("en-CA",{timeZone:tz, month:"2-digit"}).format(d);
+      const dd= new Intl.DateTimeFormat("en-CA",{timeZone:tz, day:"2-digit"}).format(d);
+      return `${y}-${m}-${dd}`;
+    };
+
+    // Top: Datum & Uhrzeit live
+    document.getElementById("today").textContent = fmtDateReadable(nowLux);
+    document.getElementById("now").textContent = fmtNow();
+    setInterval(() => { document.getElementById("now").textContent = fmtNow(); }, 1000);
+
+    // API-Aufruf
+    const u = new URL("https://api.open-meteo.com/v1/forecast");
+    u.searchParams.set("latitude", lat);
+    u.searchParams.set("longitude", lon);
+    u.searchParams.set("timezone", tz);
+    u.searchParams.set("forecast_days", "3");
+    u.searchParams.set("daily", "sunrise,sunset");
+    u.searchParams.set("hourly", [
+      "cloud_cover","cloud_cover_low","cloud_cover_mid","cloud_cover_high",
+      "visibility","temperature_2m","dew_point_2m"
+    ].join(","));
+
+    let data;
+    try {
+      const r = await fetch(u.toString(), { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+      data = await r.json();
+    } catch (e) {
+      document.getElementById("sunset-box").textContent = "Fehler: " + e.message;
+      console.error(e);
+      return;
+    }
+
+    const hh = data.hourly || {};
+    const dd = data.daily  || {};
+    const out = document.getElementById("sunset-box");
+
+    // Heute Sunrise/Sunset
+    const times = dd.time || [];
+    const idxToday = times.findIndex(t => t === localYMD(nowLux));
+    const sunriseTodayISO = (idxToday >= 0 && dd.sunrise) ? dd.sunrise[idxToday] : null;
+    const sunsetTodayISO  = (idxToday >= 0 && dd.sunset)  ? dd.sunset[idxToday]  : null;
+
+    if (sunriseTodayISO) document.getElementById("sunrise").textContent = fmtTime(sunriseTodayISO);
+    if (sunsetTodayISO)  document.getElementById("sunset").textContent  = fmtTime(sunsetTodayISO);
+    if (sunriseTodayISO && sunsetTodayISO) {
+      const diffMs = new Date(sunsetTodayISO) - new Date(sunriseTodayISO);
+      const h = Math.floor(diffMs / 3600000);
+      const m = Math.floor((diffMs % 3600000) / 60000);
+      document.getElementById("tageslaenge").textContent = `${h}h ${m}min`;
+    }
+
+    // nächster Sunset
+    const sunsets = dd.sunset || [];
+    const nextSunsetISO = sunsets.find(s => new Date(s) > nowLux) || sunsets[sunsets.length - 1];
+    if (!nextSunsetISO || !Array.isArray(hh.time) || hh.time.length === 0) {
+      out.textContent = "Daten fehlen.";
+      return;
+    }
+
+    const target = new Date(nextSunsetISO);
+    let idx = 0, best = Infinity;
+    for (let i = 0; i < hh.time.length; i++) {
+      const d = Math.abs(new Date(hh.time[i]) - target);
+      if (d < best) { best = d; idx = i; }
+    }
+
+    const val = (key) => (hh[key] && hh[key][idx] != null) ? hh[key][idx] : null;
+    const total = val("cloud_cover");
+    const low   = val("cloud_cover_low");
+    const mid   = val("cloud_cover_mid");
+    const high  = val("cloud_cover_high");
+    const vis   = val("visibility");
+    const T     = val("temperature_2m");
+    const Td    = val("dew_point_2m");
+    const spread = (T != null && Td != null) ? (T - Td) : null;
+
+    // Szenario ermitteln
+    function evaluateScenario() {
+      const okVis     = (vis == null) ? true : vis >= 20000;
+      const lowLow    = (low == null) ? true : low <= 20;
+      const highSweet = (high != null && high >= 20 && high <= 70);
+      const totalLow  = (total != null && total <= 10);
+      const totalMid  = (total != null && total >= 30 && total <= 80);
+      const totalHigh = (total != null && total >= 80);
+
+      if (highSweet && lowLow && okVis)                      return { key:"crimson",  label:"Glutroter Himmel möglich" };
+      if (totalLow)                                          return { key:"classic",  label:"Klarer, klassischer Sonnenuntergang" };
+      if (totalMid && low != null && low >= 20 && low <= 70) return { key:"sunrays",  label:"Sonnenstrahlen durch Wolkenlücken möglich" };
+      if (totalHigh)                                         return { key:"dramatic", label:"Dramatischer Himmel" };
+      return { key:"unclear", label:"Unklare Lage – vor Ort prüfen" };
+    }
+
+    const scen = evaluateScenario();
+
+    // Ausgabe
+    out.innerHTML = `
+      <div id="scenario-wrap">
+        <div>
+          <div><span style="color:#6b7280">Nächster Sunset:</span>
+            <b>${fmtDateReadable(new Date(nextSunsetISO))} • ${fmtTime(nextSunsetISO)}</b>
+          </div>
+          <div style="margin:6px 0 10px 0"><b>${scen.label}</b></div>
+          <div style="color:#6b7280">Werte nahe Sunset-Stunde:</div>
+          <ul style="margin:8px 0 0 18px">
+            <li>Gesamt-Wolken: <b>${total != null ? total + "%" : "—"}</b></li>
+            <li>Hohe/Mittlere/Tiefe Wolken: <b>${high ?? "—"}%</b> / <b>${mid ?? "—"}%</b> / <b>${low ?? "—"}%</b></li>
+            <li>Sichtweite: <b>${vis != null ? km(vis) : "—"}</b></li>
+            <li>Temp / Taupunkt: <b>${T ?? "—"}°C</b> / <b>${Td ?? "—"}°C</b> ${spread != null ? "(Δ " + spread.toFixed(1) + "°C)" : ""}</li>
+          </ul>
+        </div>
+        <figure id="scenario-fig">
+          <img id="scenario-img" alt="Beispielbild: ${scen.key}" src="${imgBasePath}${scen.key}.jpeg">
+          <figcaption id="scenario-cap">Beispiel: ${scen.label}</figcaption>
+        </figure>
+      </div>
+    `;
+  })();
+  </script>
+</body>
+</html>
