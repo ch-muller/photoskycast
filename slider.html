@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Living Museums – Opinion Slider</title>
+<style>
+  :root {
+    --accent: #0f766e;
+    --muted: #e5e7eb;
+    --text: #111827;
+    --bg: #fafafa;
+  }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--text); background: var(--bg); margin:0; padding:24px; }
+  h1 { font-size:1.25rem; margin:0 0 .75rem; }
+  p { margin:.5rem 0; }
+  .note { font-size:.9rem; color:#374151; margin-bottom:1rem; }
+  .card {
+    background:#fff; border:1px solid #e5e7eb; border-radius:14px; padding:16px 16px 18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.04); max-width:860px;
+  }
+  .ends { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:.75rem; font-size:.95rem; color:#374151; }
+  .end-right { text-align:right; }
+  .mid { font-size:.85rem; color:#6b7280; white-space:nowrap; }
+
+  input[type="range"] {
+    -webkit-appearance:none; appearance:none; width:100%; height:6px; background:var(--muted);
+    border-radius:999px; outline:none; margin:.6rem 0 .25rem;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:22px; height:22px; border-radius:50%; background:var(--accent);
+    border:2px solid #fff; box-shadow:0 0 0 3px rgba(15,118,110,.15); cursor:pointer; margin-top:-8px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width:22px; height:22px; border-radius:50%; background:var(--accent); border:2px solid #fff; cursor:pointer;
+  }
+  .ticks { display:flex; justify-content:space-between; font-size:.75rem; color:#6b7280; }
+  .bubble { display:inline-block; font-size:.8rem; color:#065f46; background:#ecfdf5; border:1px solid #d1fae5; padding:4px 8px; border-radius:999px; }
+
+  .actions { display:flex; gap:.75rem; margin-top:.75rem; }
+  button {
+    border:1px solid #e5e7eb; background:#111827; color:#fff; padding:.6rem .9rem; border-radius:10px; cursor:pointer;
+  }
+  button.secondary { background:#fff; color:#111827; }
+  .small { font-size:.8rem; color:#6b7280; }
+
+  /* Results */
+  .results { margin-top:16px; display:none; }
+  .stat { display:flex; align-items:center; gap:.5rem; margin:.25rem 0; }
+  .scale {
+    position:relative; height:10px; background:#e5e7eb; border-radius:999px; margin:.5rem 0 0; width:100%;
+  }
+  .scale::before { /* center tick at 0 */
+    content:""; position:absolute; left:50%; top:-4px; width:2px; height:18px; background:#cbd5e1;
+    transform:translateX(-50%);
+  }
+  .needle {
+    position:relative; height:0; margin-top:12px;
+  }
+  .pin {
+    position:absolute; top:-6px; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:10px solid var(--accent);
+    transform:translateX(-50%);
+  }
+  .legend { display:flex; justify-content:space-between; font-size:.75rem; color:#6b7280; }
+</style>
+</head>
+<body>
+  <h1>Living Museums – Cultural Preservation or Performance?</h1>
+  <p>In Namibia and other regions, some local communities offer Living Museums that present aspects of their traditional culture to visitors.<br
+This brief survey invites you to share your opinion — whether you have visited such a place or not — about the cultural and ethical dimensions of these initiatives.</p>
+  <p class="note">Anonymous participation: no email addresses or personal data are collected. This demo stores only anonymous aggregate totals in your browser.</p>
+
+  <div class="card" role="region" aria-labelledby="q-label">
+    <p id="q-label" style="margin-top:0;">
+      Do you believe that Living Museums can help preserve and share cultural traditions with visitors — or do they risk turning traditional lifestyles into staged performances created mainly for tourism, with little benefit for the people represented?
+    </p>
+
+    <div class="ends" aria-hidden="true">
+      <div>Preserve &amp; share culture</div>
+      <div class="mid">Neutral</div>
+      <div class="end-right">Staged for tourism</div>
+    </div>
+
+    <input type="range" id="q" min="-3" max="3" step="1" value="0" aria-label="Opinion slider (−3 to +3)">
+    <div class="ticks" aria-hidden="true">
+      <span>−3</span><span>−2</span><span>−1</span><span>0</span><span>+1</span><span>+2</span><span>+3</span>
+    </div>
+    <div><span class="bubble" id="bubble">Neutral</span></div>
+
+    <div class="actions">
+      <button id="submit">Submit &amp; show results</button>
+      <button id="reset" class="secondary" title="Clears only your local totals (demo)">Reset (this browser)</button>
+    </div>
+
+    <p class="small">Scale: −3 (left) … +3 (right). 0 = neutral.</p>
+
+    <!-- Results -->
+    <div class="results" id="results" aria-live="polite">
+      <div class="stat"><strong>Participants (aggregate):</strong> <span id="count">0</span></div>
+      <div class="stat"><strong>Tendency (average −3…+3):</strong> <span id="avg">0.00</span></div>
+
+      <div class="legend"><span>−3</span><span>0</span><span>+3</span></div>
+      <div class="scale" id="scale"></div>
+      <div class="needle">
+        <div class="pin" id="pin" style="left:50%;"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ---------- Helper labels ---------- */
+const labels = { "-3":"Strongly left", "-2":"Leans left", "-1":"Slightly left", "0":"Neutral", "1":"Slightly right", "2":"Leans right", "3":"Strongly right" };
+const slider = document.getElementById("q");
+const bubble = document.getElementById("bubble");
+function updateBubble(){ bubble.textContent = labels[slider.value] || slider.value; }
+slider.addEventListener("input", updateBubble); updateBubble();
+
+/* ---------- Simple local aggregate storage (demo only) ---------- */
+async function submitVote(value){
+const res = await fetch("/api/vote", {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ value })
+});
+if (!res.ok) throw new Error("Failed to submit");
+}
+
+async function readResults(){
+const res = await fetch("/api/stats");
+if (!res.ok) throw new Error("Failed to load stats");
+return res.json();
+}
+
+// Example wiring after clicking your Submit button:
+// document.getElementById("submit").addEventListener("click", async (e) => {
+// e.preventDefault();
+// const v = Number(document.getElementById("q").value);
+// await submitVote(v);
+// const stats = await readResults();
+// // update your DOM using stats.count, stats.avg, stats.buckets
+// });
+
+/* ---------- Events ---------- */
+document.getElementById("submit").addEventListener("click", (e) => {
+  e.preventDefault();
+  submitVote(slider.value);
+  renderResults();
+  // Optional: disable double voting in same browser session
+  // document.getElementById("submit").disabled = true;
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  localStorage.removeItem(KEY);
+  renderResults();
+});
+
+/* On load, if there are existing totals, show them */
+if (readAggregate().count > 0) renderResults();
+
+/* ---------- Integration note ----------
+To collect real, cross-visitor totals:
+- POST slider.value to your backend (e.g., /api/vote on Vercel) and store in a DB (Vercel Postgres/Supabase).
+- Replace submitVote(...) with an async fetch() call.
+- For showing results, fetch aggregates from /api/stats and call renderResults() with those values.
+No personal data should be sent; keep it strictly anonymous.
+--------------------------------------- */
+</script>
+</body>
+</html>
